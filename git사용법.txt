@@ -7,12 +7,12 @@ code .
 
 # 3. 이제 git init → 자동 main 브랜치!
 git init  # main 브랜치 생성됨
-git config user.name "byeonggubaek"
-git config user.email "oranjes@naver.com"
+git config user.name "cijoo2"
+git config user.email "thus25@gmail.com"
 
 git add .
 git commit -m "Initial commit"
-git remote add origin https://github.com/byeonggubaek/homefit.git
+git remote add origin https://github.com/cijoo2/DGPlayground.git
 git push -u origin main
 
 #4. branch 처리 
@@ -31,6 +31,7 @@ git push origin --delete <브랜치명>
 git switch main 
 git pull 
 git merge <브랜치명>
+dkanrjsk
 
 
 
