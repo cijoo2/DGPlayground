@@ -87,6 +87,14 @@ export interface ChartData {
   columns: Record<string, any>;
   data: Record<string, any>;
 }
+export interface RankingItem{
+  rank: number;
+  id: string;
+  name: string;
+  img: string;
+  cnt: number;
+  workout_cnt: number;
+}
 /*=======================================================================================================
   우편번호 
 =======================================================================================================*/

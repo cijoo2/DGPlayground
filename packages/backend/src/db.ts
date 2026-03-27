@@ -1,6 +1,6 @@
 // oracle-pool.ts (에러 수정 완료)
 import oracledb from 'oracledb';
-import { NavItem, NavSubItem, ColDesc, WorkoutRecord, ChartData, WorkoutRecordWithPlan, MenuPos, WorkoutHistory, Member, WorkoutDetail } from 'shared';
+import { NavItem, NavSubItem, ColDesc, WorkoutRecord, ChartData, WorkoutRecordWithPlan, MenuPos, WorkoutHistory, Member, WorkoutDetail, RankingItem } from 'shared';
 import dotenv from 'dotenv';
 import Logger from './logger.js'
 
@@ -21,7 +21,7 @@ let pool: any = null;
 export async function initPool(): Promise<void> {
   if (pool) return;
   try {
-    oracledb.fetchAsString = [oracledb.CLOB];    
+    oracledb.fetchAsString = [oracledb.CLOB];
     pool = await oracledb.createPool(DB_CONFIG);
     console.log('DB풀을 생성하였습니다.');
     await Logger.log('i', 'DB풀 생성 성공');
@@ -54,20 +54,20 @@ async function select(sql: string, binds: any[] = []): Promise<any[]> {
   try {
     // 1. 쿼리 시작 로그
     await initPool();
-    connection = await pool!.getConnection();    
+    connection = await pool!.getConnection();
     logEntry = await Logger.logQueryStart(sql, binds);
     const result = await connection.execute(sql, binds, {
       outFormat: oracledb.OUT_FORMAT_OBJECT,
     });
     // 2. 성공 로그
-    await Logger.logQuerySuccess(logEntry, result.rows.length)    
+    await Logger.logQuerySuccess(logEntry, result.rows.length)
     return result.rows as any[];
   } catch (error) {
     // 3. 에러 로그
     await Logger.logQueryError(logEntry, error)
     throw error
   } finally {
-    if (connection) 
+    if (connection)
       await connection.close();
   }
 }
@@ -80,7 +80,7 @@ async function execPlsql(sql: string, binds: Record<string, any>, options: any =
   try {
     // 1. 쿼리 시작 로그
     await initPool();
-    connection = await pool!.getConnection();    
+    connection = await pool!.getConnection();
     logEntry = await Logger.logQueryStart(sql, binds);
 
     const result = await connection.execute(sql, binds, {
@@ -92,7 +92,7 @@ async function execPlsql(sql: string, binds: Record<string, any>, options: any =
     await Logger.logQuerySuccess(logEntry, result.rowsAffected || 0);
     // JSON CLOB 자동 처리
     if (result.outBinds?.json) {
-      const clob = result.outBinds.json as oracledb.Lob;      
+      const clob = result.outBinds.json as oracledb.Lob;
       const jsonData = await clob.getData();
       const jsonString = typeof jsonData === 'string' ? jsonData : jsonData.toString();
       return JSON.parse(jsonString);
@@ -104,7 +104,7 @@ async function execPlsql(sql: string, binds: Record<string, any>, options: any =
     await Logger.logQueryError(logEntry, error)
     throw error
   } finally {
-    if (connection) 
+    if (connection)
       await connection.close();
   }
 }
@@ -114,7 +114,7 @@ async function execPlsql(sql: string, binds: Record<string, any>, options: any =
  */
 async function execute(sql: string, binds: any[] = []): Promise<any> {
   let logEntry = null;
-  let connection = null;  
+  let connection = null;
   try {
     await initPool();
     connection = await pool!.getConnection();
@@ -129,8 +129,8 @@ async function execute(sql: string, binds: any[] = []): Promise<any> {
     // 3. 에러 로그
     await Logger.logQueryError(logEntry, error)
     throw error
-  } finally {    
-    if (connection) 
+  } finally {
+    if (connection)
       await connection.close();
   }
 }
@@ -185,7 +185,7 @@ WHERE   a.page = :1
 }
 async function searchRawSubMenus(key: string = ''): Promise<any[]> {
   if (!key?.trim() || key.trim().length < 2) {
-    return [];  
+    return [];
   }
   const cleanKey = key.trim();
   return select(`
@@ -301,6 +301,41 @@ JOIN    workout B ON B.id = A.workout_id
 WHERE   A.workout_record_id = :1
 `, [workoutRecordId]);
 }
+async function _getRanking(from_dt: string = '', to_dt: string = ''): Promise<any[]> {
+  return select(`
+SELECT
+    ROW_NUMBER() OVER (ORDER BY CNT DESC) AS RANK,
+    A.ID,
+    A.NAME,
+    A.IMG,
+    B.CNT,
+    C.WORKOUT_TIME
+FROM MEMBER A
+JOIN (
+    SELECT
+        MEMBER_ID,
+        COUNT(*) AS CNT
+    FROM WORKOUT_RECORD
+    WHERE WO_DT >= :1
+      AND WO_DT <= :2
+    GROUP BY MEMBER_ID
+) B
+    ON A.ID = B.MEMBER_ID
+JOIN (
+    SELECT
+        A.MEMBER_ID,
+        SUM(B.WORKOUT_TIME) AS WORKOUT_TIME
+    FROM WORKOUT_RECORD A
+    JOIN WORKOUT_DETAIL B
+        ON B.WORKOUT_RECORD_ID = A.ID
+    WHERE A.WO_DT >= :3
+      AND A.WO_DT <= :4
+    GROUP BY A.MEMBER_ID
+) C
+    ON C.MEMBER_ID = A.ID
+ORDER BY B.CNT DESC
+`, [from_dt, to_dt, from_dt,   to_dt]);
+}
 // 4. 회원 정보 조회 (예시)
 async function getRawMember(memberId: string): Promise<any> {
   return select(`
@@ -327,10 +362,10 @@ WHERE A.id = :1
 export const getMenus = async (title: string = ''): Promise<NavItem[]> => {
   const menus = await getRawMenus();
   const subMenus = await getRawSubMenus(title);
-  
+
   // 메뉴 맵 생성
   const menuMap = new Map<string, NavItem>();
-  
+
   // 1단계: 메뉴 객체 생성
   menus.forEach((menu: any) => {
     const navItem: NavItem = {
@@ -342,12 +377,12 @@ export const getMenus = async (title: string = ''): Promise<NavItem[]> => {
     };
     menuMap.set(navItem.id, navItem);
   });
-  
+
   // 2단계: 서브메뉴 연결 (1-1 → id="1"에 추가)
   subMenus.forEach((sub: any) => {
     const parentId = sub.ID.split('-')[0]; // "1-1" → "1"
     const parentMenu = menuMap.get(parentId);
-    
+
     if (parentMenu) {
       parentMenu.sub_menus.push({
         id: sub.ID,
@@ -357,7 +392,7 @@ export const getMenus = async (title: string = ''): Promise<NavItem[]> => {
       });
     }
   });
-  
+
   return Array.from(menuMap.values());
 }
 // 3. 메뉴 검색
@@ -379,15 +414,15 @@ export const getCurMenuPos = async (page: string = ''): Promise<MenuPos> => {
 // 4. Column Description 조회
 export const getColDescs = async (tableName: string): Promise<ColDesc[]> => {
   const colDescs = await getRawColDescs(tableName);
-  return colDescs.map((col: any) => ({      
+  return colDescs.map((col: any) => ({
     id: col.ID,
-    title: col.TITLE,     
+    title: col.TITLE,
     type: col.TYPE,
     width: col.WIDTH,
     summary: col.SUMMARY,
     aggregate: 0
   }));
-} 
+}
 // 5. 운동내역 조회
 export const getWorkoutRecords = async (memberId: string, from: string, to: string): Promise<WorkoutRecord[]> => {
   const records = await getRawWorkoutRecords(memberId, from, to);
@@ -439,6 +474,17 @@ export const getWorkoutDetail = async (workoutRecordId: string = ''): Promise<Wo
     img: rec.IMG,
     target_reps: rec.TARGET_REPS,
     target_sets: rec.TARGET_SETS
+  }));
+}
+export const getRanking = async (from_dt: string = '', to_dt: string = ''): Promise<RankingItem[]> => {
+  const subMenus = await _getRanking(from_dt, to_dt);
+  return subMenus.map((sub: any) => ({
+    rank: sub.RANK,
+    id: sub.ID,
+    name: sub.NAME,
+    img: sub.IMG,
+    cnt: sub.CNT,
+    workout_cnt: sub.WORKOUT_CNT
   }));
 }
 // 10. 회원정보 조회

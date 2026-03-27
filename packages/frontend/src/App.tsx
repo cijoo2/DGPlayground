@@ -9,6 +9,7 @@ import HistoryContent from "./pages/HistoryContent";
 import HistoryState from "./pages/HistoryState";
 import WorkoutTracking from "./pages/RewardMall";
 import RewardMall from "./pages/RewardMall";
+import RewardRanking from "./pages/RewardRanking";
 
 function App() {
   return (
@@ -36,7 +37,11 @@ function App() {
       <Route path="/reward/point" element={<MainLayout />}>
         <Route index element={<RewardPoint />} />           {/* / */}
         <Route path="*" element={<div>404 Not Found</div>} />
-      </Route>      
+      </Route>
+      <Route path="/reward/ranking" element={<MainLayout />}>
+        <Route index element={<RewardRanking />} />           {/* / */}
+        <Route path="*" element={<div>404 Not Found</div>} />
+      </Route>     
       <Route path="/reward/mall" element={<MainLayout />}>
         <Route index element={<RewardMall />} />           {/* / */}
         <Route path="*" element={<div>404 Not Found</div>} />

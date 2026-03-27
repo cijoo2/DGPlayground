@@ -1,5 +1,5 @@
 import WdogBreadClum from "@/components/WdogBreadClum";
-import RewardMallMain from "@/sections/RewardMallmain";
+import RewardMallMain from "@/sections/RewardMallMain";
 
 export default function RewardMall() {
 
